@@ -39,10 +39,10 @@ static int add_command(Commands* comms, Command command)
     if(comms->size >= COMMAND_CAPACITY)
     {
         EPRINTF("Commands added exceed maximum capacity: %d\n", COMMAND_CAPACITY);
-        return 0;
+        return FAILURE;
     }
     comms->commands[comms->size++] = command;
-    return 1;
+    return SUCCESS;
 }
 
 NODISCARD
@@ -188,9 +188,9 @@ int main(int argc, char** argv)
         "lists all todos",
         list_tasks_command,
     };
-    if(!add_command(&commands, add)) return FAILURE;
-    if(!add_command(&commands, help)) return FAILURE;
-    if(!add_command(&commands, list)) return FAILURE;
+    if(add_command(&commands, add)) return FAILURE;
+    if(add_command(&commands, help)) return FAILURE;
+    if(add_command(&commands, list)) return FAILURE;
     if(argc < 1)
     {
         if(help_command(&argc, &argv)) return FAILURE;
