@@ -120,7 +120,13 @@ static char* read_file(const char* file_path)
         fclose(file);
         return NULL;
     }
-    size_t file_size = ftell(file);
+    long file_size = ftell(file);
+    if(file_size < 0)
+    {
+        EPRINTF("Could not ftell file %s because %s", file_path, strerror(errno));
+        fclose(file);
+        return NULL;
+    }
     if(fseek(file, 0L, SEEK_SET) < 0)
     {
         EPRINTF("Could not seek file %s because %s", file_path, strerror(errno));
@@ -135,11 +141,11 @@ static char* read_file(const char* file_path)
         return NULL;
     }
     size_t read_bytes = fread(buffer, sizeof(char), file_size, file);
-    if(read_bytes != file_size)
+    if(read_bytes != (size_t) file_size)
     {
         free(buffer);
         fclose(file);
-        EPRINTF("Failed to read all bytes of %s, expected: %zu but wrote %zu", file_path, file_size, read_bytes);
+        EPRINTF("Failed to read all bytes of %s, expected: %zu but read %zu", file_path, file_size, read_bytes);
         return NULL;
     }
     *(buffer+file_size) = '\0';
