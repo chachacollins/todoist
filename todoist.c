@@ -48,6 +48,8 @@ static int add_command(Commands* comms, Command command)
 NODISCARD
 static const char* shift_args(int *argc, char*** argv)
 {
+    assert(argc != NULL);
+    assert(argv != NULL);
     if(*argc < 1) return NULL;
     *argc -= 1;
     return *(*argv)++;
@@ -103,8 +105,9 @@ static int add_task_command(int *argc, char*** argv)
 }
 
 NODISCARD
-static const char* read_file(const char* file_path)
+static char* read_file(const char* file_path)
 {
+    assert(file_path != NULL);
     FILE *file = fopen(file_path, "rb");
     if(file == NULL)
     {
@@ -149,10 +152,11 @@ static int list_tasks_command(int *argc, char*** argv)
 {
     UNUSED(argc);
     UNUSED(argv);
-    const char* todo_file = read_file(TODOS_FILE);
+    char* todo_file = read_file(TODOS_FILE);
     if(todo_file == NULL) return FAILURE;
     printf("-----------------TODO------------------\n");
     printf("%s", todo_file);
+    free(todo_file);
     return SUCCESS;
 }
 
