@@ -3,6 +3,7 @@
 
 #define NODISCARD __attribute__((warn_unused_result))
 #define UNUSED(var) (void)(var);
+#define EPRINT(fmt, ...) fprintf(stderr, "ERROR:"fmt"\n", __VA_ARGS__)
 
 typedef NODISCARD int (*comm_fn)(int *argc, char** argv);
 
@@ -27,7 +28,7 @@ static int add_command(Commands* comms, Command command)
     assert(comms != NULL);
     if(comms->size >= COMMAND_CAPACITY)
     {
-        (void)printf("ERROR: Commands added exceed maximum capacity: %d\n", COMMAND_CAPACITY);
+        EPRINT("Commands added exceed maximum capacity: %d\n", COMMAND_CAPACITY);
         return 0;
     }
     comms->commands[comms->size++] = command;
@@ -37,11 +38,7 @@ static int add_command(Commands* comms, Command command)
 NODISCARD
 static const char* shift_args(int *argc, char** argv)
 {
-    if(*argc < 1)
-    {
-        (void)printf("ERROR: Not enough arguements to be shifted\n");
-        return NULL;
-    }
+    if(*argc < 1) return NULL;
     *argc -= 1;
     return *argv++;
 }
@@ -56,16 +53,11 @@ static int usage(int *argc, char** argv)
     printf("Options:\n");
     for(int i = 0; i < commands.size; ++i)
     {
-        Command com = commands.commands[i];
-        assert(com.s_flag != NULL);
-        assert(com.l_flag != NULL);
-        assert(com.help != NULL);
-        int result = printf("    %s, %-10s  %s\n", com.s_flag, com.l_flag, com.help);
-        if(result < 0)
-        {
-            perror("ERROR:");
-            return 0;
-        }
+        Command command = commands.commands[i];
+        assert(command.s_flag != NULL);
+        assert(command.l_flag != NULL);
+        assert(command.help != NULL);
+        printf("    %s, %-10s  %s\n", command.s_flag, command.l_flag, command.help);
     }
     return 1;
 }
