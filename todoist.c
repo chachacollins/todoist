@@ -32,6 +32,7 @@ typedef struct {
 } Commands;
 
 static Commands commands;
+static sqlite3 *db;
 
 NODISCARD 
 static int add_command(Commands* comms, Command command)
@@ -78,6 +79,7 @@ static int help_command(int *argc, char*** argv)
 NODISCARD
 static int add_task_command(int *argc, char*** argv)
 {
+    assert(db != NULL);
     const char* task = shift_args(argc, argv);
     if(task == NULL)
     {
@@ -85,22 +87,33 @@ static int add_task_command(int *argc, char*** argv)
         HELP("td add \"TASK TO BE ADDED\"");
         return FAILURE;
     }
-    FILE *todos_file = fopen(TODOS_FILE, "a");
-    if(todos_file == NULL)
+#define MAXIMUM_INSERT_LENGTH 1024
+    char insert_task_into_table[MAXIMUM_INSERT_LENGTH];
+    sprintf(insert_task_into_table, "INSERT INTO TASK(task, done) VALUES (\"%s\", false)", task);
+    sqlite3_stmt *pp_stmt;
+    int sql3_result = sqlite3_prepare_v2(db, 
+            insert_task_into_table,
+            strlen(insert_task_into_table),
+            &pp_stmt, 
+            NULL
+            );
+    if(sql3_result != SQLITE_OK)
     {
-        EPRINTF("Could not open file %s because %s", TODOS_FILE, strerror(errno));
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    const char* prefix = "- [ ] ";
-    size_t total_write = strlen(prefix) + strlen(task) + 1;
-    size_t written_bytes = fprintf(todos_file, "%s%s\n", prefix, task);
-    if(total_write != written_bytes)
+    sql3_result = sqlite3_step(pp_stmt);
+    if(sql3_result != SQLITE_DONE)
     {
-        EPRINTF("Failed to write all bytes of %s, expected: %zu but wrote %zu", task, total_write, written_bytes);
-        fclose(todos_file);
+        EPRINTF("could not run sql statement insert_into_table because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    fclose(todos_file);
+    sql3_result = sqlite3_finalize(pp_stmt);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not finalize sql statement insert_into_table because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
     SPRINTF("added task %s", task);
     return SUCCESS;
 }
@@ -167,8 +180,6 @@ static int list_tasks_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
-static sqlite3 *db;
-
 NODISCARD 
 static int init_command(int *argc, char*** argv)
 {
@@ -177,7 +188,7 @@ static int init_command(int *argc, char*** argv)
     assert(db != NULL);
     const char* create_task_table = 
         "CREATE TABLE TASK ("
-            "id   INTEGER PRIMARY_KEY,"
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
             "task TEXT,"
             "done bool"
         ");";
@@ -186,7 +197,6 @@ static int init_command(int *argc, char*** argv)
     int sql3_result = sqlite3_prepare_v2(db, create_task_table, strlen(create_task_table), &pp_stmt, NULL);
     if(sql3_result != SQLITE_OK)
     {
-        printf("%d\n", sql3_result);
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
@@ -223,7 +233,7 @@ int main(int argc, char** argv)
         add_task_command,
     };
     Command list = {
-        "-ls",
+        "-l",
         "list",
         "lists all todos",
         list_tasks_command,
@@ -231,13 +241,13 @@ int main(int argc, char** argv)
     Command init = {
         "-i",
         "init",
-        "Initializes the application",
+        "initializes the application",
         init_command,
     };
-    if(!add_command(&commands, add)) return EXIT_FAILURE;
-    if(!add_command(&commands, help)) return EXIT_FAILURE;
-    if(!add_command(&commands, list)) return EXIT_FAILURE;
     if(!add_command(&commands, init)) return EXIT_FAILURE;
+    if(!add_command(&commands, add)) return EXIT_FAILURE;
+    if(!add_command(&commands, list)) return EXIT_FAILURE;
+    if(!add_command(&commands, help)) return EXIT_FAILURE;
     if(argc < 1)
     {
         if(!help_command(&argc, &argv)) return EXIT_FAILURE;
