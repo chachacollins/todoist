@@ -3,8 +3,11 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <math.h>
 #include <sqlite3.h>
 
+//NOTE: POSIX EXTENSION. IMPLEMENT IT IN MISSING ENVIRONMENTS
+unsigned char *strdup(const unsigned char *s);
 #define NODISCARD __attribute__((warn_unused_result))
 #define UNUSED(var) (void)(var);
 //TODO: add somekind of logging system
@@ -118,6 +121,95 @@ static int add_task_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
+typedef struct {
+    unsigned char* todo;
+    int id;
+} Task;
+
+typedef struct {
+    size_t capacity;
+    size_t len;
+    Task *tasks;
+} Tasks;
+
+NODISCARD
+static int insert_task(Tasks *tasks, Task task) 
+{
+    if(tasks->len + 1 >= tasks->capacity)
+    {
+        size_t new_capacity = tasks->capacity > 8 ? tasks->capacity * 2 : 8;
+        tasks->tasks = realloc(tasks->tasks, sizeof(Task) * new_capacity);
+        if(tasks->tasks == NULL)
+        {
+            EPRINTF("could not allocate memory to add task because: %s", strerror(errno));
+            return FAILURE;
+        }
+        tasks->capacity = new_capacity;
+    }
+    tasks->tasks[tasks->len++] = task;
+    return SUCCESS;
+}
+
+NODISCARD
+static int free_tasks(Tasks *tasks)
+{
+    for(size_t i = 0; i < tasks->len; ++i)
+    {
+        free(tasks->tasks[i].todo);
+    }
+    free(tasks->tasks);
+    memset(tasks, sizeof(Task), tasks->capacity);
+    return SUCCESS;
+}
+
+NODISCARD
+static size_t get_max_id_length(Tasks *tasks)
+{
+    size_t max_length = 0;
+    for(size_t i = 0; i < tasks->len; ++i) 
+    {
+        Task task = tasks->tasks[i];
+        size_t length = log10(task.id) - 1;
+        if(length > max_length)
+        {
+            max_length = length;
+        }
+    }
+    return max_length;
+}
+
+NODISCARD
+static size_t get_max_str_length(Tasks *tasks)
+{
+    size_t max_length = 0;
+    for(size_t i = 0; i < tasks->len; ++i) 
+    {
+        Task task = tasks->tasks[i];
+        size_t length = strlen((char*)task.todo);
+        if(length > max_length)
+        {
+            max_length = length;
+        }
+    }
+    return max_length;
+}
+
+static size_t evenize(size_t n)
+{
+    if((n % 2) != 0) n = n + 1;
+    return n;
+}
+
+inline void print_separator(size_t total_len)
+{
+    for(size_t i = 0; i < total_len; ++i)
+    {
+        printf("-");
+    }
+    puts("--");
+    return;
+}
+
 NODISCARD
 static int list_tasks_command(int *argc, char*** argv)
 {
@@ -140,12 +232,16 @@ static int list_tasks_command(int *argc, char*** argv)
     sql3_result = sqlite3_step(pp_stmt);
     const int id_row   = 0;
     const int task_row = 1;
-    printf("--------------TODO--------------\n");
+    Tasks tasks = {0};
     while(sql3_result == SQLITE_ROW)
     {
         const int id  = sqlite3_column_int(pp_stmt, id_row);
         const unsigned char* task = sqlite3_column_text(pp_stmt, task_row);
-        printf("%d: %s\n", id, task);
+        if(!insert_task(&tasks, (Task) {strdup(task), (int) id}))
+        {
+            sqlite3_finalize(pp_stmt);
+            return FAILURE;
+        }
         sql3_result = sqlite3_step(pp_stmt);
     }
     if(sql3_result != SQLITE_DONE)
@@ -159,6 +255,21 @@ static int list_tasks_command(int *argc, char*** argv)
         EPRINTF("could not finalize sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
+    size_t id_len = evenize(get_max_id_length(&tasks));
+#define MIN_ID 4
+    id_len = id_len > MIN_ID ? id_len : MIN_ID;
+    size_t todo_len = evenize(get_max_str_length(&tasks));
+#define PADDING_BYTE_LEN 1
+    size_t total_len = id_len + todo_len + PADDING_BYTE_LEN;
+    print_separator(total_len);
+    printf("%-*s| %-*s|\n", (int)id_len,"ID", (int)todo_len, "TASK");
+    print_separator(total_len);
+    for(size_t i = 0; i < tasks.len; ++i)
+    {
+        Task task = tasks.tasks[i];
+        printf("%-*d|%-*s |\n", (int)id_len, task.id, (int)todo_len, task.todo);
+    }
+    if(!free_tasks(&tasks)) return FAILURE;
     return SUCCESS;
 }
 
