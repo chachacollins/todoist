@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <sqlite3.h>
 
 #define NODISCARD __attribute__((warn_unused_result))
 #define UNUSED(var) (void)(var);
@@ -12,8 +13,8 @@
 #define SPRINTF(fmt, ...) printf("\033[32mSUCCESS: " fmt "\033[0m\n", __VA_ARGS__)
 #define HELP(fmt) fprintf(stderr, "\033[33mUSAGE: " fmt "\033[0m\n")
 #define TODOS_FILE "todos.txt"
-#define SUCCESS 0
-#define FAILURE 1
+#define SUCCESS 1
+#define FAILURE 0
 
 typedef NODISCARD int (*comm_fn)(int *argc, char*** argv);
 
@@ -166,6 +167,45 @@ static int list_tasks_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
+static sqlite3 *db;
+
+NODISCARD 
+static int init_command(int *argc, char*** argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+    assert(db != NULL);
+    const char* create_task_table = 
+        "CREATE TABLE TASK ("
+            "id   INTEGER PRIMARY_KEY,"
+            "task TEXT,"
+            "done bool"
+        ");";
+
+    sqlite3_stmt *pp_stmt;
+    int sql3_result = sqlite3_prepare_v2(db, create_task_table, strlen(create_task_table), &pp_stmt, NULL);
+    if(sql3_result != SQLITE_OK)
+    {
+        printf("%d\n", sql3_result);
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_step(pp_stmt);
+    if(sql3_result != SQLITE_DONE)
+    {
+        EPRINTF("could not run sql statement create_table because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_finalize(pp_stmt);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not finalize sql statement create_table because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    SPRINTF("%s","initialized the app successfully");
+    return SUCCESS;
+}
+
 int main(int argc, char** argv)
 {
     const char* program_name = shift_args(&argc, &argv);
@@ -188,13 +228,28 @@ int main(int argc, char** argv)
         "lists all todos",
         list_tasks_command,
     };
-    if(add_command(&commands, add)) return FAILURE;
-    if(add_command(&commands, help)) return FAILURE;
-    if(add_command(&commands, list)) return FAILURE;
+    Command init = {
+        "-i",
+        "init",
+        "Initializes the application",
+        init_command,
+    };
+    if(!add_command(&commands, add)) return EXIT_FAILURE;
+    if(!add_command(&commands, help)) return EXIT_FAILURE;
+    if(!add_command(&commands, list)) return EXIT_FAILURE;
+    if(!add_command(&commands, init)) return EXIT_FAILURE;
     if(argc < 1)
     {
-        if(help_command(&argc, &argv)) return FAILURE;
-        return FAILURE;
+        if(!help_command(&argc, &argv)) return EXIT_FAILURE;
+        return EXIT_FAILURE;
+    }
+    int result = EXIT_SUCCESS;
+    int sql3_result = sqlite3_open("task.db", &db);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not open sqlite database connection because of %s", sqlite3_errmsg(db));
+        result = EXIT_FAILURE;
+        goto done;
     }
     const char* flag = shift_args(&argc, &argv);
     for(int i = 0; i < commands.size; ++i)
@@ -203,9 +258,13 @@ int main(int argc, char** argv)
         if(strcmp(command.s_flag, flag) == 0 || strcmp(command.l_flag, flag) == 0)
         {
             assert(command.fn != NULL);
-            return command.fn(&argc, &argv);
+            if(!command.fn(&argc, &argv)) result = EXIT_FAILURE;
+            goto done;
         }
     }
     EPRINTF("Unrecognized option passed: %s", flag);
-    return FAILURE;
+    result = EXIT_FAILURE;
+done:
+    sqlite3_close(db);
+    return result;
 }
