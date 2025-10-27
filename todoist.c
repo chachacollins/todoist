@@ -119,64 +119,46 @@ static int add_task_command(int *argc, char*** argv)
 }
 
 NODISCARD
-static char* read_file(const char* file_path)
-{
-    assert(file_path != NULL);
-    FILE *file = fopen(file_path, "rb");
-    if(file == NULL)
-    {
-        EPRINTF("Could not open file %s because %s", file_path, strerror(errno));
-        return NULL;
-    }
-    if(fseek(file, 0L, SEEK_END) < 0)
-    {
-        EPRINTF("Could not seek file %s because %s", file_path, strerror(errno));
-        fclose(file);
-        return NULL;
-    }
-    long file_size = ftell(file);
-    if(file_size < 0)
-    {
-        EPRINTF("Could not ftell file %s because %s", file_path, strerror(errno));
-        fclose(file);
-        return NULL;
-    }
-    if(fseek(file, 0L, SEEK_SET) < 0)
-    {
-        EPRINTF("Could not seek file %s because %s", file_path, strerror(errno));
-        fclose(file);
-        return NULL;
-    }
-    char* buffer = (char*) malloc(file_size + 1);
-    if(buffer == NULL)
-    {
-        EPRINTF("Could not allocate buffer to hold contents for file %s because %s", file_path, strerror(errno));
-        fclose(file);
-        return NULL;
-    }
-    size_t read_bytes = fread(buffer, sizeof(char), file_size, file);
-    if(read_bytes != (size_t) file_size)
-    {
-        free(buffer);
-        fclose(file);
-        EPRINTF("Failed to read all bytes of %s, expected: %zu but read %zu", file_path, file_size, read_bytes);
-        return NULL;
-    }
-    *(buffer+file_size) = '\0';
-    fclose(file);
-    return buffer;
-}
-
-NODISCARD
 static int list_tasks_command(int *argc, char*** argv)
 {
     UNUSED(argc);
     UNUSED(argv);
-    char* todo_file = read_file(TODOS_FILE);
-    if(todo_file == NULL) return FAILURE;
-    printf("-----------------TODO------------------\n");
-    printf("%s", todo_file);
-    free(todo_file);
+    assert(db != NULL);
+    const char* retrieve_tasks_from_table = "SELECT * FROM TASK;";
+    sqlite3_stmt *pp_stmt;
+    int sql3_result = sqlite3_prepare_v2(db, 
+            retrieve_tasks_from_table,
+            strlen(retrieve_tasks_from_table),
+            &pp_stmt, 
+            NULL
+            );
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_step(pp_stmt);
+    const int id_row   = 0;
+    const int task_row = 1;
+    printf("--------------TODO--------------\n");
+    while(sql3_result == SQLITE_ROW)
+    {
+        const int id  = sqlite3_column_int(pp_stmt, id_row);
+        const unsigned char* task = sqlite3_column_text(pp_stmt, task_row);
+        printf("%d: %s\n", id, task);
+        sql3_result = sqlite3_step(pp_stmt);
+    }
+    if(sql3_result != SQLITE_DONE)
+    {
+        EPRINTF("could not run sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_finalize(pp_stmt);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not finalize sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
     return SUCCESS;
 }
 
