@@ -163,19 +163,18 @@ static int free_tasks(Tasks *tasks)
 }
 
 NODISCARD
-static size_t get_max_id_length(Tasks *tasks)
+static int get_max_id_length(Tasks *tasks)
 {
-    size_t max_length = 0;
+    int max_length = 0;
     for(size_t i = 0; i < tasks->len; ++i) 
     {
         Task task = tasks->tasks[i];
-        size_t length = log10(task.id) - 1;
-        if(length > max_length)
+        if(task.id > max_length)
         {
-            max_length = length;
+            max_length = task.id;
         }
     }
-    return max_length;
+    return ((int)floor(log10(max_length))) + 1;
 }
 
 NODISCARD
@@ -206,7 +205,7 @@ inline void print_separator(size_t total_len)
     {
         printf("-");
     }
-    puts("--");
+    printf("\n");
     return;
 }
 
@@ -255,20 +254,21 @@ static int list_tasks_command(int *argc, char*** argv)
         EPRINTF("could not finalize sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    size_t id_len = evenize(get_max_id_length(&tasks));
+    int id_len = evenize(get_max_id_length(&tasks));
 #define MIN_ID 4
     id_len = id_len > MIN_ID ? id_len : MIN_ID;
-    size_t todo_len = evenize(get_max_str_length(&tasks));
-#define PADDING_BYTE_LEN 1
+    int todo_len = evenize(get_max_str_length(&tasks));
+#define PADDING_BYTE_LEN 3
     size_t total_len = id_len + todo_len + PADDING_BYTE_LEN;
     print_separator(total_len);
-    printf("%-*s| %-*s|\n", (int)id_len,"ID", (int)todo_len, "TASK");
+    printf("%-*s| %-*s|\n", id_len,"ID", todo_len, "TASK");
     print_separator(total_len);
     for(size_t i = 0; i < tasks.len; ++i)
     {
         Task task = tasks.tasks[i];
-        printf("%-*d|%-*s |\n", (int)id_len, task.id, (int)todo_len, task.todo);
+        printf("%-*d|%-*s |\n", id_len, task.id, todo_len, task.todo);
     }
+    print_separator(total_len);
     if(!free_tasks(&tasks)) return FAILURE;
     return SUCCESS;
 }
