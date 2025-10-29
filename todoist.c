@@ -20,6 +20,7 @@ unsigned char *strdup(const unsigned char *s);
 #define FAILURE 0
 #define ID_ROW 0
 #define TASK_ROW 1
+#define DONE_ROW 2
 
 typedef NODISCARD int (*comm_fn)(int *argc, char*** argv);
 
@@ -127,6 +128,7 @@ static int add_task_command(int *argc, char*** argv)
 typedef struct {
     unsigned char* todo;
     int id;
+    int done;
 } Task;
 
 typedef struct {
@@ -212,13 +214,42 @@ inline void print_separator(size_t total_len)
     return;
 }
 
+void print_task(Task *task, int id_len, int todo_len)
+{
+    if(task->done)
+    {
+        printf("\033[9m%-*d|%-*s |\033[0m\n", id_len, task->id, todo_len, task->todo);
+    } 
+    else
+    {
+        printf("%-*d|%-*s |\n", id_len, task->id, todo_len, task->todo);
+    }
+}
+
+
 NODISCARD
 static int list_tasks_command(int *argc, char*** argv)
 {
-    UNUSED(argc);
-    UNUSED(argv);
     assert(db != NULL);
-    const char* retrieve_tasks_from_table = "SELECT * FROM TASK;";
+    const char* subcommand = shift_args(argc, argv);
+    const char* retrieve_tasks_from_table;
+    if(subcommand)
+    {
+        if(strcmp(subcommand,"all") == 0)
+        {
+            retrieve_tasks_from_table = "SELECT * FROM TASK;";
+        }
+        else
+        {
+            EPRINTF("unknown subcommand %s", subcommand);
+            HELP("td list all");
+            return FAILURE;
+        }
+    }
+    else
+    {
+        retrieve_tasks_from_table = "SELECT * FROM TASK WHERE done = false;";
+    }
     sqlite3_stmt *pp_stmt;
     int sql3_result = sqlite3_prepare_v2(db, 
             retrieve_tasks_from_table,
@@ -235,9 +266,10 @@ static int list_tasks_command(int *argc, char*** argv)
     Tasks tasks = {0};
     while(sql3_result == SQLITE_ROW)
     {
-        const int id  = sqlite3_column_int(pp_stmt, ID_ROW);
+        int id  = sqlite3_column_int(pp_stmt, ID_ROW);
         const unsigned char* task = sqlite3_column_text(pp_stmt, TASK_ROW);
-        if(!insert_task(&tasks, (Task) {strdup(task), (int) id}))
+        const int done = sqlite3_column_int(pp_stmt, DONE_ROW);
+        if(!insert_task(&tasks, (Task) {strdup(task), id, done}))
         {
             sqlite3_finalize(pp_stmt);
             return FAILURE;
@@ -267,7 +299,7 @@ static int list_tasks_command(int *argc, char*** argv)
     for(size_t i = 0; i < tasks.len; ++i)
     {
         Task task = tasks.tasks[i];
-        printf("%-*d|%-*s |\n", id_len, task.id, todo_len, task.todo);
+        print_task(&task, id_len, todo_len);
     }
     print_separator(total_len);
     if(!free_tasks(&tasks)) return FAILURE;
