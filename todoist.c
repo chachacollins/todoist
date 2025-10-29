@@ -18,6 +18,8 @@ unsigned char *strdup(const unsigned char *s);
 #define TODOS_FILE "todos.txt"
 #define SUCCESS 1
 #define FAILURE 0
+#define ID_ROW 0
+#define TASK_ROW 1
 
 typedef NODISCARD int (*comm_fn)(int *argc, char*** argv);
 
@@ -79,6 +81,8 @@ static int help_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
+#define MAX_BUF_SIZE 1024
+
 NODISCARD
 static int add_task_command(int *argc, char*** argv)
 {
@@ -90,8 +94,7 @@ static int add_task_command(int *argc, char*** argv)
         HELP("td add \"TASK TO BE ADDED\"");
         return FAILURE;
     }
-#define MAXIMUM_INSERT_LENGTH 1024
-    char insert_task_into_table[MAXIMUM_INSERT_LENGTH];
+    char insert_task_into_table[MAX_BUF_SIZE];
     sprintf(insert_task_into_table, "INSERT INTO TASK(task, done) VALUES (\"%s\", false)", task);
     sqlite3_stmt *pp_stmt;
     int sql3_result = sqlite3_prepare_v2(db, 
@@ -229,13 +232,11 @@ static int list_tasks_command(int *argc, char*** argv)
         return FAILURE;
     }
     sql3_result = sqlite3_step(pp_stmt);
-    const int id_row   = 0;
-    const int task_row = 1;
     Tasks tasks = {0};
     while(sql3_result == SQLITE_ROW)
     {
-        const int id  = sqlite3_column_int(pp_stmt, id_row);
-        const unsigned char* task = sqlite3_column_text(pp_stmt, task_row);
+        const int id  = sqlite3_column_int(pp_stmt, ID_ROW);
+        const unsigned char* task = sqlite3_column_text(pp_stmt, TASK_ROW);
         if(!insert_task(&tasks, (Task) {strdup(task), (int) id}))
         {
             sqlite3_finalize(pp_stmt);
@@ -309,6 +310,77 @@ static int init_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
+NODISCARD
+static int done_command(int *argc, char*** argv)
+{
+    assert(db != NULL);
+    const char* id_str = shift_args(argc, argv);
+    if(id_str == NULL)
+    {
+        EPRINT("Please provide the id of the task to be marked as completed"); 
+        HELP("td done \"ID\"");
+        return FAILURE;
+    }
+    char mark_task_done[MAX_BUF_SIZE];
+    sprintf(mark_task_done, "UPDATE TASK SET done = true WHERE id = %s;", id_str);
+    sqlite3_stmt *pp_stmt;
+    int sql3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_step(pp_stmt);
+    if(sql3_result != SQLITE_DONE)
+    {
+        EPRINTF("could not run sql statement mark_task_done because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_reset(pp_stmt);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not reset prepared sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    memset(mark_task_done, 0, MAX_BUF_SIZE);
+    sprintf(mark_task_done, "SELECT * FROM TASK WHERE id = %s;", id_str);
+    sql3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    Task task = {0};
+    sql3_result = sqlite3_step(pp_stmt);
+    while(sql3_result == SQLITE_ROW)
+    {
+        const int id  = sqlite3_column_int(pp_stmt, ID_ROW);
+        const unsigned char* todo = sqlite3_column_text(pp_stmt, TASK_ROW);
+        task.todo = strdup(todo);
+        task.id = id;
+        sql3_result = sqlite3_step(pp_stmt);
+    }
+    if(sql3_result != SQLITE_DONE)
+    {
+        EPRINTF("could not run sql statement mark_task_done because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sql3_result = sqlite3_finalize(pp_stmt);
+    if(sql3_result != SQLITE_OK)
+    {
+        EPRINTF("could not finalize sql statement mark_task_done because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    SPRINTF("marked task %d:%s as completed\n", task.id, task.todo);
+    free(task.todo);
+    return SUCCESS;
+}
+
 int main(int argc, char** argv)
 {
     const char* program_name = shift_args(&argc, &argv);
@@ -337,9 +409,16 @@ int main(int argc, char** argv)
         "initializes the application",
         init_command,
     };
+    Command done = {
+        "-d",
+        "done",
+        "marks task as completed",
+        done_command,
+    };
     if(!add_command(&commands, init)) return EXIT_FAILURE;
     if(!add_command(&commands, add)) return EXIT_FAILURE;
     if(!add_command(&commands, list)) return EXIT_FAILURE;
+    if(!add_command(&commands, done)) return EXIT_FAILURE;
     if(!add_command(&commands, help)) return EXIT_FAILURE;
     if(argc < 1)
     {
