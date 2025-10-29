@@ -41,7 +41,7 @@ static Commands commands;
 static sqlite3 *db;
 
 NODISCARD 
-static int add_command(Commands* comms, Command command)
+static int register_command(Commands* comms, Command command)
 {
     assert(comms != NULL);
     if(comms->size >= COMMAND_CAPACITY)
@@ -85,7 +85,7 @@ static int help_command(int *argc, char*** argv)
 #define MAX_BUF_SIZE 1024
 
 NODISCARD
-static int add_task_command(int *argc, char*** argv)
+static int add_command(int *argc, char*** argv)
 {
     assert(db != NULL);
     const char* task = shift_args(argc, argv);
@@ -98,25 +98,25 @@ static int add_task_command(int *argc, char*** argv)
     char insert_task_into_table[MAX_BUF_SIZE];
     sprintf(insert_task_into_table, "INSERT INTO TASK(task, done) VALUES (\"%s\", false)", task);
     sqlite3_stmt *pp_stmt;
-    int sql3_result = sqlite3_prepare_v2(db, 
+    int sqlite3_result = sqlite3_prepare_v2(db, 
             insert_task_into_table,
             strlen(insert_task_into_table),
             &pp_stmt, 
             NULL
             );
-    if(sql3_result != SQLITE_OK)
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_step(pp_stmt);
-    if(sql3_result != SQLITE_DONE)
+    sqlite3_result = sqlite3_step(pp_stmt);
+    if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement insert_into_table because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_finalize(pp_stmt);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_finalize(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not finalize sql statement insert_into_table because %s", sqlite3_errmsg(db));
         return FAILURE;
@@ -228,7 +228,7 @@ void print_task(Task *task, int id_len, int todo_len)
 
 
 NODISCARD
-static int list_tasks_command(int *argc, char*** argv)
+static int list_command(int *argc, char*** argv)
 {
     assert(db != NULL);
     const char* subcommand = shift_args(argc, argv);
@@ -251,20 +251,20 @@ static int list_tasks_command(int *argc, char*** argv)
         retrieve_tasks_from_table = "SELECT * FROM TASK WHERE done = false;";
     }
     sqlite3_stmt *pp_stmt;
-    int sql3_result = sqlite3_prepare_v2(db, 
+    int sqlite3_result = sqlite3_prepare_v2(db, 
             retrieve_tasks_from_table,
             strlen(retrieve_tasks_from_table),
             &pp_stmt, 
             NULL
             );
-    if(sql3_result != SQLITE_OK)
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_step(pp_stmt);
+    sqlite3_result = sqlite3_step(pp_stmt);
     Tasks tasks = {0};
-    while(sql3_result == SQLITE_ROW)
+    while(sqlite3_result == SQLITE_ROW)
     {
         int id  = sqlite3_column_int(pp_stmt, ID_ROW);
         const unsigned char* task = sqlite3_column_text(pp_stmt, TASK_ROW);
@@ -274,15 +274,15 @@ static int list_tasks_command(int *argc, char*** argv)
             sqlite3_finalize(pp_stmt);
             return FAILURE;
         }
-        sql3_result = sqlite3_step(pp_stmt);
+        sqlite3_result = sqlite3_step(pp_stmt);
     }
-    if(sql3_result != SQLITE_DONE)
+    if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_finalize(pp_stmt);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_finalize(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not finalize sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
         return FAILURE;
@@ -320,20 +320,20 @@ static int init_command(int *argc, char*** argv)
         ");";
 
     sqlite3_stmt *pp_stmt;
-    int sql3_result = sqlite3_prepare_v2(db, create_task_table, strlen(create_task_table), &pp_stmt, NULL);
-    if(sql3_result != SQLITE_OK)
+    int sqlite3_result = sqlite3_prepare_v2(db, create_task_table, strlen(create_task_table), &pp_stmt, NULL);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_step(pp_stmt);
-    if(sql3_result != SQLITE_DONE)
+    sqlite3_result = sqlite3_step(pp_stmt);
+    if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement create_table because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_finalize(pp_stmt);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_finalize(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not finalize sql statement create_table because %s", sqlite3_errmsg(db));
         return FAILURE;
@@ -356,54 +356,54 @@ static int done_command(int *argc, char*** argv)
     char mark_task_done[MAX_BUF_SIZE];
     sprintf(mark_task_done, "UPDATE TASK SET done = true WHERE id = %s;", id_str);
     sqlite3_stmt *pp_stmt;
-    int sql3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
-    if(sql3_result != SQLITE_OK)
+    int sqlite3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_step(pp_stmt);
-    if(sql3_result != SQLITE_DONE)
+    sqlite3_result = sqlite3_step(pp_stmt);
+    if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement mark_task_done because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_reset(pp_stmt);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_reset(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not reset prepared sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
     memset(mark_task_done, 0, MAX_BUF_SIZE);
     sprintf(mark_task_done, "SELECT * FROM TASK WHERE id = %s;", id_str);
-    sql3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_prepare_v2(db, mark_task_done, strlen(mark_task_done), &pp_stmt, NULL);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    if(sql3_result != SQLITE_OK)
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
     Task task = {0};
-    sql3_result = sqlite3_step(pp_stmt);
-    while(sql3_result == SQLITE_ROW)
+    sqlite3_result = sqlite3_step(pp_stmt);
+    while(sqlite3_result == SQLITE_ROW)
     {
         const int id  = sqlite3_column_int(pp_stmt, ID_ROW);
         const unsigned char* todo = sqlite3_column_text(pp_stmt, TASK_ROW);
         task.todo = strdup(todo);
         task.id = id;
-        sql3_result = sqlite3_step(pp_stmt);
+        sqlite3_result = sqlite3_step(pp_stmt);
     }
-    if(sql3_result != SQLITE_DONE)
+    if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement mark_task_done because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    sql3_result = sqlite3_finalize(pp_stmt);
-    if(sql3_result != SQLITE_OK)
+    sqlite3_result = sqlite3_finalize(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not finalize sql statement mark_task_done because %s", sqlite3_errmsg(db));
         return FAILURE;
@@ -427,13 +427,13 @@ int main(int argc, char** argv)
         "-a",
         "add",
         "adds a todo",
-        add_task_command,
+        add_command,
     };
     Command list = {
         "-l",
         "list",
         "lists all todos",
-        list_tasks_command,
+        list_command,
     };
     Command init = {
         "-i",
@@ -447,19 +447,28 @@ int main(int argc, char** argv)
         "marks task as completed",
         done_command,
     };
-    if(!add_command(&commands, init)) return EXIT_FAILURE;
-    if(!add_command(&commands, add)) return EXIT_FAILURE;
-    if(!add_command(&commands, list)) return EXIT_FAILURE;
-    if(!add_command(&commands, done)) return EXIT_FAILURE;
-    if(!add_command(&commands, help)) return EXIT_FAILURE;
+    if(!register_command(&commands, init)) return EXIT_FAILURE;
+    if(!register_command(&commands, add)) return EXIT_FAILURE;
+    if(!register_command(&commands, list)) return EXIT_FAILURE;
+    if(!register_command(&commands, done)) return EXIT_FAILURE;
+    if(!register_command(&commands, help)) return EXIT_FAILURE;
     if(argc < 1)
     {
         if(!help_command(&argc, &argv)) return EXIT_FAILURE;
         return EXIT_FAILURE;
     }
     int result = EXIT_SUCCESS;
-    int sql3_result = sqlite3_open("task.db", &db);
-    if(sql3_result != SQLITE_OK)
+    //TODO: put this in the initialization logic
+    if(system("mkdir -p $HOME/.todoist/") < 0)
+    {
+        EPRINTF("could not create todoist directory: %s", strerror(errno));
+        return FAILURE;
+    }
+    const char* home_path = getenv("HOME");
+    char task_db[MAX_BUF_SIZE];
+    sprintf(task_db, "%s/.todoist/%s", home_path, "task.db");
+    int sqlite3_result = sqlite3_open(task_db, &db);
+    if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not open sqlite database connection because of %s", sqlite3_errmsg(db));
         result = EXIT_FAILURE;
