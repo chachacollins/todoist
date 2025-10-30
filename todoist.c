@@ -5,9 +5,10 @@
 #include <errno.h>
 #include <math.h>
 #include <sqlite3.h>
+#include <ctype.h>
 
 //NOTE: POSIX EXTENSION. IMPLEMENT IT IN MISSING ENVIRONMENTS
-unsigned char *strdup(const unsigned char *s);
+unsigned char *strdup(const char *s);
 #define NODISCARD __attribute__((warn_unused_result))
 #define UNUSED(var) (void)(var);
 //TODO: add somekind of logging system
@@ -85,22 +86,40 @@ static int help_command(int *argc, char*** argv)
 #define MAX_BUF_SIZE 1024
 
 NODISCARD
+static int is_valid_task_string(char* str)
+{
+    if (!str) return FAILURE;
+    for (size_t i = 0; str[i] != '\0'; i++)
+    {
+        if (str[i] < 32 || str[i] > 126)
+        {
+            if (str[i] != '\n' && str[i] != '\t')
+            {
+                return FAILURE;
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+NODISCARD
 static int add_command(int *argc, char*** argv)
 {
     assert(db != NULL);
-    const char* task = shift_args(argc, argv);
+    char* task = (char*) shift_args(argc, argv);
     if(task == NULL)
     {
         EPRINT("Please provide a task to be added to the list of todos"); 
         HELP("td add \"TASK TO BE ADDED\"");
         return FAILURE;
     }
-    char insert_task_into_table[MAX_BUF_SIZE];
-    sprintf(insert_task_into_table, "INSERT INTO TASK(task, done) VALUES (\"%s\", false)", task);
+    if(!is_valid_task_string(task)) return FAILURE;
+
+    const char* insert_task_query = "INSERT INTO TASK(task, done) VALUES (?, 0);";
     sqlite3_stmt *pp_stmt;
     int sqlite3_result = sqlite3_prepare_v2(db, 
-            insert_task_into_table,
-            strlen(insert_task_into_table),
+            insert_task_query,
+            -1,
             &pp_stmt, 
             NULL
             );
@@ -109,18 +128,29 @@ static int add_command(int *argc, char*** argv)
         EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
+    sqlite3_result = sqlite3_bind_text(pp_stmt, 1, task, -1, SQLITE_TRANSIENT);
+    if(sqlite3_result != SQLITE_OK)
+    {
+        EPRINTF("could not bind task parameter because %s", sqlite3_errmsg(db));
+        sqlite3_finalize(pp_stmt);
+        return FAILURE;
+    }
+
     sqlite3_result = sqlite3_step(pp_stmt);
     if(sqlite3_result != SQLITE_DONE)
     {
         EPRINTF("could not run sql statement insert_into_table because %s", sqlite3_errmsg(db));
+        sqlite3_finalize(pp_stmt);
         return FAILURE;
     }
+
     sqlite3_result = sqlite3_finalize(pp_stmt);
     if(sqlite3_result != SQLITE_OK)
     {
         EPRINTF("could not finalize sql statement insert_into_table because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
+
     SPRINTF("added task %s", task);
     return SUCCESS;
 }
@@ -142,13 +172,14 @@ static int insert_task(Tasks *tasks, Task task)
 {
     if(tasks->len + 1 >= tasks->capacity)
     {
-        size_t new_capacity = tasks->capacity > 8 ? tasks->capacity * 2 : 8;
-        tasks->tasks = realloc(tasks->tasks, sizeof(Task) * new_capacity);
-        if(tasks->tasks == NULL)
+        size_t new_capacity = tasks->capacity > 0 ? tasks->capacity * 2 : 8;
+        Task *new_ptr = realloc(tasks->tasks, sizeof(Task) * new_capacity);
+        if(new_ptr == NULL)
         {
             EPRINTF("could not allocate memory to add task because: %s", strerror(errno));
             return FAILURE;
         }
+        tasks->tasks = new_ptr;
         tasks->capacity = new_capacity;
     }
     tasks->tasks[tasks->len++] = task;
@@ -160,10 +191,11 @@ static int free_tasks(Tasks *tasks)
 {
     for(size_t i = 0; i < tasks->len; ++i)
     {
-        free(tasks->tasks[i].todo);
+        if(tasks->tasks[i].todo)
+            free(tasks->tasks[i].todo);
     }
     free(tasks->tasks);
-    memset(tasks, sizeof(Task), tasks->capacity);
+    memset(tasks, 0, tasks->capacity);
     return SUCCESS;
 }
 
@@ -267,9 +299,16 @@ static int list_command(int *argc, char*** argv)
     while(sqlite3_result == SQLITE_ROW)
     {
         int id  = sqlite3_column_int(pp_stmt, ID_ROW);
-        const unsigned char* task = sqlite3_column_text(pp_stmt, TASK_ROW);
+        char* todo = (char*) sqlite3_column_text(pp_stmt, TASK_ROW);
+        assert(todo != NULL);
+        if(!is_valid_task_string(todo)) 
+        {
+            EPRINTF("ID = %d", id);
+            return FAILURE;
+        }
         const int done = sqlite3_column_int(pp_stmt, DONE_ROW);
-        if(!insert_task(&tasks, (Task) {strdup(task), id, done}))
+        Task task = {strdup(todo), id, done};
+        if(!insert_task(&tasks, task))
         {
             sqlite3_finalize(pp_stmt);
             return FAILURE;
@@ -392,7 +431,7 @@ static int done_command(int *argc, char*** argv)
     while(sqlite3_result == SQLITE_ROW)
     {
         const int id  = sqlite3_column_int(pp_stmt, ID_ROW);
-        const unsigned char* todo = sqlite3_column_text(pp_stmt, TASK_ROW);
+        const char* todo = (char*) sqlite3_column_text(pp_stmt, TASK_ROW);
         task.todo = strdup(todo);
         task.id = id;
         sqlite3_result = sqlite3_step(pp_stmt);
