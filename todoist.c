@@ -326,6 +326,11 @@ static int list_command(int *argc, char*** argv)
         EPRINTF("could not finalize sql statement retrieve_tasks because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
+    if(tasks.len == 0)
+    {
+        printf("[EMPTY]\n");
+        return SUCCESS;
+    }
     int id_len = evenize(get_max_id_length(&tasks));
 #define MIN_ID 4
     id_len = id_len > MIN_ID ? id_len : MIN_ID;
@@ -452,6 +457,36 @@ static int done_command(int *argc, char*** argv)
     return SUCCESS;
 }
 
+NODISCARD
+static int clear_command(int *argc, char*** argv)
+{
+    UNUSED(argc);
+    UNUSED(argv);
+    assert(db != NULL);
+    char *clear_tasks = "DELETE FROM TASK;";
+    sqlite3_stmt *pp_stmt;
+    int sqlite3_result = sqlite3_prepare_v2(db, clear_tasks, strlen(clear_tasks), &pp_stmt, NULL);
+    if(sqlite3_result != SQLITE_OK)
+    {
+        EPRINTF("could not prepare sql statement because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sqlite3_result = sqlite3_step(pp_stmt);
+    if(sqlite3_result != SQLITE_DONE)
+    {
+        EPRINTF("could not run sql statement clear_tasks because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    sqlite3_result = sqlite3_finalize(pp_stmt);
+    if(sqlite3_result != SQLITE_OK)
+    {
+        EPRINTF("could not finalize sql statement mark_task_done because %s", sqlite3_errmsg(db));
+        return FAILURE;
+    }
+    SPRINTF("%s", "cleared all tasks\n");
+    return SUCCESS;
+}
+
 int main(int argc, char** argv)
 {
     const char* program_name = shift_args(&argc, &argv);
@@ -486,11 +521,18 @@ int main(int argc, char** argv)
         "marks task as completed",
         done_command,
     };
+    Command clear = {
+        "-c",
+        "clear",
+        "removes all tasks in the todo list",
+        clear_command,
+    };
     if(!register_command(&commands, init)) return EXIT_FAILURE;
-    if(!register_command(&commands, add)) return EXIT_FAILURE;
+    if(!register_command(&commands, add))  return EXIT_FAILURE;
     if(!register_command(&commands, list)) return EXIT_FAILURE;
     if(!register_command(&commands, done)) return EXIT_FAILURE;
     if(!register_command(&commands, help)) return EXIT_FAILURE;
+    if(!register_command(&commands, clear))return EXIT_FAILURE;
     if(argc < 1)
     {
         if(!help_command(&argc, &argv)) return EXIT_FAILURE;
