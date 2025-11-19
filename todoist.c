@@ -1,3 +1,5 @@
+/* This is under public domain license */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
