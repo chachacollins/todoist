@@ -453,7 +453,7 @@ static int done_command(int *argc, char*** argv)
         log_error("could not finalize sql statement mark_task_done because %s", sqlite3_errmsg(db));
         return FAILURE;
     }
-    log_info("marked task %d:%s as completed\n", task.id, task.todo);
+    log_info("marked task %d:%s as completed", task.id, task.todo);
     free(task.todo);
     return SUCCESS;
 }
