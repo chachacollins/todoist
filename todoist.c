@@ -16,7 +16,6 @@
 unsigned char *strdup(const char *s);
 #define NODISCARD __attribute__((warn_unused_result))
 #define UNUSED(var) (void)(var);
-//TODO: add somekind of logging system
 #define TODOS_FILE "todos.txt"
 #define SUCCESS 1
 #define FAILURE 0
@@ -271,6 +270,21 @@ static int list_command(int *argc, char*** argv)
         if(strcmp(subcommand,"all") == 0)
         {
             retrieve_tasks_from_table = "SELECT * FROM TASK;";
+        }
+        else if(strcmp(subcommand, "pre") == 0)
+        {
+            const char *prefix = shift_args(argc, argv);
+            if(!prefix)
+            {
+                log_error("please provide a prefix to search by");
+                return FAILURE;
+            }
+            char buffer[1024] = {0};
+            sprintf(buffer, 
+                    "SELECT * FROM TASK WHERE task like '%s%%' AND done = false;",
+                    prefix
+                    );
+            retrieve_tasks_from_table = buffer;
         }
         else
         {
@@ -540,7 +554,6 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
     int result = EXIT_SUCCESS;
-    //TODO: put this in the initialization logic
     if(system("mkdir -p $HOME/.todoist/") < 0)
     {
         log_error("could not create todoist directory: %s", strerror(errno));
